@@ -26,58 +26,224 @@
         , doc: true
     }
 
-    /**************************************************************************
-    ---                                 avalon                              ---
-    **************************************************************************/
     avalon.ready(function() {
 
         //common
-        Easemob.im.utils = {
-            $: function ( id ) {
+        var utils = {
+            nodeListType: {
+                '[object Object]': 1
+                , '[object NodeList]': 1
+                , '[object HTMLCollection]': 1
+                , '[object Array]': 1
+            }
+            , $: function ( id ) {
                 return document.getElementById(id);
             }
-
-            , addClass: function ( obj, className ) {
-                obj.className += ' ' + className;
-            }
-
-            , removeClass: function ( obj, className ) {
-                while ( obj.className.indexOf(className) >= 0 ) {
-                    obj.className = obj.className.replace(className, '');
+            , each: function ( obj, fn ) {
+                for ( var i in obj ) {
+                    if ( obj.hasOwnProperty(i) ) {
+                        typeof fn === 'function' && fn(i, obj[i]);
+                    }
                 }
             }
-
-            , on: function ( target, ev, fn, isCapture ) {
-                if ( target.addEventListener ) {
-                    target.addEventListener(ev, fn, isCapture);
-                } else if ( target.attachEvent ) {
-                    target.attachEvent('on' + ev, fn);
-                } else {
-                    target['on' + ev] = fn;
+            , $Remove: function ( target ) {
+                if ( target ) {
+                    if ( target.remove ) {
+                        target.remove();
+                    } else {
+                        var parentNode = target.parentNode;
+                        if ( parentNode ) {
+                            parentNode.removeChild(target);
+                        }
+                    }
                 }
             }
+            , siblings: function ( currentNode, classFilter ) {
+                if ( !currentNode || !currentNode.parentNode ) {
+                    return null;
+                }
+                var nodes = currentNode.parentNode.childNodes,
+                    result = [];
 
+                for ( var d = 0, len = nodes.length; d < len; d++ ) {
+                    if ( nodes[d].nodeType === 1 && nodes[d] != currentNode ) {
+                        if ( classFilter && this.hasClass(nodes[d], classFilter) ) {
+                            result.push(nodes[d]);
+                        } else {
+                            result.push(nodes[d]);
+                        }
+                    }
+                }
+                return result;
+            }
+            , insertBefore: function ( parentNode, newDom, curDom ) {
+                if ( parentNode && newDom ) {
+                    if ( parentNode.childNodes.length === 0 ) {
+                        parentNode.appendChild(newDom);
+                    } else {
+                        parentNode.insertBefore(newDom, curDom);
+                    }
+                }
+            }
+            , getIEVersion: function () {
+                var ua = navigator.userAgent,matches,tridentMap={'4':8,'5':9,'6':10,'7':11};
+                matches = ua.match(/MSIE (\d+)/i);
+                if(matches&&matches[1]) {
+                    return +matches[1];
+                }
+                matches = ua.match(/Trident\/(\d+)/i);
+                if(matches&&matches[1]) {
+                    return tridentMap[matches[1]]||null;
+                }
+                return null;
+            }
+            , live: function ( target, ev, fn ) {
+                utils.on(document, ev, function ( e ) {
+                    var ev = e || window.event,
+                        tar = ev.target || ev.srcElement,
+                        targetList = utils.$Class(target);
+
+                    if ( targetList.length ) {
+                        for ( var len = targetList.length, i = 0; i < len; i++ ) {
+                            if ( targetList[i] == tar || targetList[i] == tar.parentNode ) {
+                                fn.apply(targetList[i] == tar ? tar : tar.parentNode, arguments);
+                            }   
+                        }
+                    } else {
+                        if ( targetList == target ) {
+                            fn.apply( target, arguments );
+                        }
+                    }
+                });
+            }
+            , on: (function () {
+                var bind = function ( target, ev, fn, isCapture ) {
+                    if ( target.addEventListener ) {
+                        target.addEventListener(ev, fn, isCapture);
+                    } else if ( target.attachEvent ) {
+                        target['_' + ev] = function () {
+                            fn.apply(target, arguments);
+                        }
+                        target.attachEvent('on' + ev, target['_' + ev]);
+                    } else {
+                        target['on' + ev] = fn;
+                    }
+                };
+                return function ( target, ev, fn, isCapture ) {
+                    if ( Object.prototype.toString.call(target) in utils.nodeListType && target.length ) {
+                        for ( var i = 0, l = target.length; i < l; i++ ) {
+                            target[i].nodeType === 1 && bind(target[i], ev, fn, isCapture);
+                        }
+                    } else {
+                        bind(target, ev, fn, isCapture);
+                    }
+                };
+            }())
             , remove: function ( target, ev, fn ) {
+                if ( !target ) {
+                    return;
+                }
                 if ( target.removeEventListener ) {
                     target.removeEventListener(ev, fn);
                 } else if ( target.detachEvent ) {
-                    target.detachEvent('on' + ev, fn);
+                    target.detachEvent('on' + ev, target['_' + ev]);
                 } else {
                     target['on' + ev] = null;
                 }
             }
-
-            , getAttr: function ( dom, attr ) {
-                return dom.getAttribute(attr);
+            , one: function ( target, ev, fn, isCapture ) {
+                var me = this,
+                    tfn = function () {
+                        fn.apply(this, arguments);
+                        me.remove(target, ev, tfn);
+                    };
+                me.on(target, ev, tfn, isCapture);  
             }
-
-            , setAttr: function ( dom, attr, value ) {
-                return dom.setAttribute(attr, value);
+            , extend: function ( object, extend ) {
+                for ( var o in extend ) {
+                    if ( extend.hasOwnProperty(o) ) {
+                        object[o] = extend[o];
+                    }
+                }
+                return object;
             }
-            
+            , addClass: function ( target, className ) {
+                if ( !target ) {
+                    return;
+                }
+                if ( Object.prototype.toString.call(target) in utils.nodeListType && target.length ) {
+                    for ( var i = 0, l = target.length; i < l; i++ ) {
+                        if ( !this.hasClass(target[i], className) ) {
+                            typeof target[i].className !== 'undefined' && (target[i].className += ' ' + className);
+                        }
+                    }
+                } else {
+                    if ( !this.hasClass(target, className) ) {
+                        target.className += ' ' + className;
+                    }
+                }
+            }
+            , removeClass: function ( target, className ) {
+                if ( !target ) {
+                    return;
+                }
+                if ( Object.prototype.toString.call(target) in utils.nodeListType && target.length ) {
+                    for ( var i = 0, l = target.length; i < l; i++ ) {
+                        while ( typeof target[i].className !== 'undefined' && target[i].className.indexOf(className) >= 0 ) {
+                            target[i].className = target[i].className.replace(className, '');
+                        }
+                    }
+                } else {
+                    while ( target.className.indexOf(className) >= 0 ) {
+                        target.className = target.className.replace(className, '');
+                    }
+                }
+            }
+            , hasClass: function ( target, className ) {
+                if ( !target || !target.className ) {
+                    return false;
+                }
+                
+                var classArr = target.className.split(' ');
+                for ( var i = 0, l = classArr.length; i < l; i++ ) {
+                    if ( classArr[i].indexOf(className) > -1 ) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            , $Class: function ( DomDotClass ) {
+                var temp = DomDotClass.split('.'),
+                    tag = temp[0],
+                    className = temp[1];
+
+                if ( document.getElementsByClassName ) {
+                    return document.getElementsByClassName(className);
+                } else {
+                    var tags = document.getElementsByTagName(tag),
+                        arr = [];
+                    for ( var i = 0, l = tags.length; i < l; i++ ) {
+                        if ( this.hasClass(tags[i], className) ) {
+                            arr.push(tags[i]);
+                        }
+                    }
+                    tags = null;
+                    return arr;
+                }
+            }
+            , html: function ( dom, html ) {
+                if ( !dom ) {
+                    return;
+                }
+                if ( typeof html === 'undefined' ) {
+                    return dom.innerHTML;
+                } else {
+                    dom.innerHTML = html;
+                }
+            }
             , encode: function ( str ) {
                 if ( !str || str.length === 0 ) {
-                    return str;
+                    return '';
                 }
                 var s = '';
                 s = str.replace(/&amp;/g, "&");
@@ -88,9 +254,45 @@
                 s = s.replace(/\n/g, "<br>");
                 return s;
             }
-
+            , decode: function ( str ) {
+                if ( !str || str.length === 0 ) {
+                    return '';
+                }
+                var s = '';
+                s = str.replace(/&amp;/g, "&");
+                return s;
+            }
+            , query: function ( key ) {
+                var r = location.href.match(new RegExp('[?&]?'+key+'=[0-9a-zA-Z%._-]*[^&]', 'g'));
+                r = r && r[0] ? (r[0][0]=='?' || r[0][0]=='&' ? r[0].slice(1) : r[0]) : '';
+                return r.slice(key.length+1);
+            }
+            , isAndroid: /android/i.test(navigator.useragent)
+            , isQQBrowserInAndroid: function () {
+                return this.isAndroid && /MQQBrowser/.test(navigator.userAgent);
+            }
+            , isMin: function () {//detect the browser if minimize
+                if(document.visibilityState && document.visibilityState == 'hidden' || document.hidden) {
+                    return true;
+                } 
+            }
+            , setcookie: function ( key, value ) {
+                var date = new Date();
+                date.setTime(date.getTime() + 30*24*3600*1000);
+                document.cookie = encodeURIComponent(key) + '=' + encodeURIComponent(value) + ';path=/;expires=' + date.toGMTString();
+            }
+            , getcookie: function ( key ) {
+                var results = document.cookie.match('(^|;) ?' + encodeURIComponent(key) + '=([^;]*)(;|$)'); 
+                return results ? decodeURIComponent(results[2]) : '';
+            }
+            , getAttr: function ( dom, attr ) {
+                return dom.getAttribute(attr);
+            }
+            , setAttr: function ( dom, attr, value ) {
+                return dom.setAttribute(attr, value);
+            }
             , handleBriefMsg: function ( target, msg ) {//显示即时消息
-                var target = Easemob.im.utils.$(target);
+                var target = utils.$(target);
 
                 if ( !target ) {
                     return;
@@ -113,7 +315,7 @@
                         break;
                 }
 
-                msgDom.innerHTML = Easemob.im.Utils.parseEmotions(Easemob.im.utils.encode(msg.value.replace(/\n/mg, '')));
+                msgDom.innerHTML = Easemob.im.Utils.parseEmotions(utils.encode(msg.value.replace(/\n/mg, '')));
             }
 
             /*
@@ -122,7 +324,7 @@
             */
             , handleUnreadCount: function ( target, isHide ) {
 
-                var target = Easemob.im.utils.$(target);
+                var target = utils.$(target);
 
                 if ( !target ) {
                     return;
@@ -142,9 +344,9 @@
                 }
             }
 
-            , appendMsg: function ( from, to, msg, msgType ) {//消息上屏
+            , appendMsg: function ( from, to, msg ) {//消息上屏
                 var isSelf = from == profileInfo.username,
-                    curWrapper = Easemob.im.utils.$(isSelf ? to : from);
+                    curWrapper = utils.$(isSelf ? to : from);
 
                 var div = document.createElement('div');
                 div.className = 'emim-clear emim-mt20 emim-tl emim-msg-wrapper ';
@@ -176,6 +378,49 @@
 
             , fileMessage: function ( fileInput, fileMsg, fileType ) {//文件消息，其中图片和语音对应展示，其他类型显示下载容器
 
+                var me = this,
+                    msg = new Message('img', me.conn.getUniqueId());
+
+                msg.set({
+                    file: file || Easemob.im.Utils.getFileUrl(realFile.getAttribute('id')),
+                    to: config.toUser,
+                    uploadError: function ( error ) {
+                        //显示图裂，无法重新发送
+                        if ( !Easemob.im.Utils.isCanUploadFileAsync() ) {
+                            swfupload && swfupload.settings.upload_error_handler();
+                        } else {
+                            var id = error.id,
+                                wrap = utils.$Dom(id);
+    
+                            utils.html(utils.$Class('a.easemobWidget-noline')[0], '<i class="easemobWidget-unimage">I</i>');
+                            utils.addClass(utils.$Dom(id + '_loading'), 'em-hide');
+                            me.scrollBottom();
+                        }
+                    },
+                    uploadComplete: function () {},
+                    success: function ( id ) {
+                        utils.$Remove(utils.$Dom(id + '_loading'));
+                        utils.$Remove(utils.$Dom(id + '_failed'));
+                        /*if ( Easemob.im.Utils.isCanUploadFileAsync ) {
+                            me.appendMsg(profileInfo.username, to, fileDom, 'img');
+                        } else {
+                            swfupload.settings.upload_success_handler();
+                        }*/
+                    },
+                    fail: function ( id ) {
+                        utils.addClass(utils.$Dom(id + '_loading'), 'em-hide');
+                        utils.removeClass(utils.$Dom(id + '_failed'), 'em-hide');
+                    },
+                    flashUpload: flashUpload
+                });
+                me.conn.send(msg.body);
+                realFile.value = '';
+
+                if ( Easemob.im.Utils.isCanUploadFileAsync() ) {
+                    me.appendDate(new Date().getTime(), config.toUser);
+                    me.appendMsg(config.user.name, config.toUser, msg);
+                }
+
                 if ( fileMsg ) {//收消息
                     return this.generateFileDom(fileType, fileMsg);
                 } else {
@@ -195,34 +440,11 @@
                         type = file.filetype.toLowerCase();
                         fileDom = me.generateFileDom(type, file.url);
                     }
-
-                    var opt = {
-                        type: 'chat',
-                        fileInputId: id,
-                        filename: file && file.filename || '',
-                        to: to,
-                        apiUrl: Easemob.im.config.apiURL,
-                        ext: {
-                            postfix: file && file.filetype || ''
-                        },
-                        fail: function ( error ) {
-                            //var messageContent = (error.msg || '') + ",发送图片文件失败:" + (filename||flashFilename);
-                            //appendMsg(curUserId, to, messageContent);
-                        },
-                        success: function ( data ) {
-                            if ( Easemob.im.Utils.isCanUploadFileAsync ) {
-                                me.appendMsg(profileInfo.username, to, fileDom, 'img');
-                            } else {
-                                swfupload.settings.upload_success_handler();
-                            }
-                        }
-                    };
-                    if ( targetContact.isGroup ) {
+                    /*if ( targetContact.isGroup ) {
                         opt.type = 'groupchat';
                         opt.to = targetContact.roomId;
-                    }
+                    }*/
                             
-                    conn.send(opt);
                 }
             }
         }
@@ -368,7 +590,7 @@
                 }
             }
             , checkPwd: function () {
-                var pwd = Easemob.im.utils.$('password');
+                var pwd = utils.$('password');
 
                 if ( signup.password != signup.cpassword ) {
                     pwd.style.borderBottom = '1px solid rgb(255, 42, 0)';
@@ -435,7 +657,7 @@
                 chat.height = chat.getHeight();
             }
             , getHeight: function () {
-                var chatDom = Easemob.im.utils.$('emimWrapper');
+                var chatDom = utils.$('emimWrapper');
 
                 chat.chatHeight = chatDom.getBoundingClientRect().height;
                 return chat.chatHeight - 112;
@@ -517,8 +739,8 @@
                 contactList.curWrapper = tab;
             }
             , select: function () {
-                contactList.cur = Easemob.im.utils.getAttr(this, 'id');
-                var roomId = Easemob.im.utils.getAttr(this, 'roomId');
+                contactList.cur = utils.getAttr(this, 'id');
+                var roomId = utils.getAttr(this, 'roomId');
 
                 if ( roomId ) {
                     targetContact.isGroup = true;
@@ -532,7 +754,7 @@
                 targetContact.name = cur;
                 chatWrapper.toggle(cur);
 
-                Easemob.im.utils.handleUnreadCount(contactList.cur, true);
+                utils.handleUnreadCount(contactList.cur, true);
             }
         });
 
@@ -585,18 +807,23 @@
                 }
 
                 var msg = new Message('txt', conn.getUniqueId());
-                msg.set(send.text, to, function ( id ) {
-                    Easemob.im.utils.$(id + '_loading').remove();
-                    Easemob.im.utils.$(id + '_failed').remove();
-                }, function ( id ) {
-                    Easemob.im.utils.addClass(Easemob.im.utils.$(id + '_loading'), 'emim-hide');
-                    Easemob.im.utils.removeClass(Easemob.im.utils.$(id + '_failed'), 'emim-hide');
+                msg.set({
+                    value: send.text,
+                    to: to,
+                    success: function ( id ) {
+                        utils.$(id + '_loading').remove();
+                        utils.$(id + '_failed').remove();
+                    },
+                    fail: function ( id ) {
+                        utils.addClass(utils.$(id + '_loading'), 'emim-hide');
+                        utils.removeClass(utils.$(id + '_failed'), 'emim-hide');
+                    }
                 });
-                msg.handleGroup(targetContact.isGroup)
+                targetContact.isGroup && msg.setGroup('groupchat');
                 conn.send(msg.body);
 
                 //消息上屏
-                Easemob.im.utils.appendMsg(profileInfo.username, to, msg, 'txt');
+                utils.appendMsg(profileInfo.username, to, msg, 'txt');
                 send.text = '';
                 send.enableSend = false;
             }
@@ -612,11 +839,11 @@
                 var ev = window.event || e,
                     target = ev.target || ev.srcElement;
 
-                target.nodeName == 'IMG' && (send.text += Easemob.im.utils.getAttr(target, 'data'));
+                target.nodeName == 'IMG' && (send.text += utils.getAttr(target, 'data'));
                 send.enableSend = true;
             }
             , realSendFile: function () {
-                Easemob.im.utils.fileMessage(this);
+                utils.fileMessage(this);
             }
         });
 
@@ -643,20 +870,13 @@
             },
             onTextMessage: function ( message ) {//收到文本消息时的回调方法
                 var msg = new Message('txt');
-                msg.set(message.data);
-                Easemob.im.utils.appendMsg(message.from, message.to, msg, 'txt');
-            },
-            onEmotionMessage: function ( message ) {//收到表情消息时的回调方法
-                var str = '';
-
-                avalon.each(message.data, function(k, v) {
-                    str += v.type == 'emotion' ? '<img class="emim-face-msg" src="' + v.data + '">' : v.data;
-                });
-                Easemob.im.utils.appendMsg(message.from, message.to, Easemob.im.utils.textMessage(str.replace(/\n/g, '<br>')), str);
-                str = null;
+                msg.set({value: message.data});
+                utils.appendMsg(message.from, message.to, msg);
             },
             onPictureMessage: function ( message ) {//收到图片消息时的回调方法
-                Easemob.im.utils.appendMsg(message.from, message.to, Easemob.im.utils.fileMessage(null, message.url, message.ext.postfix || message.filename.slice(message.filename.lastIndexOf('.') + 1)), 'img');
+                var msg = new Message('img');
+                msg.set({file: {url: message.url}});
+                utils.appendMsg(message.from, message.to, msg);
             },
             onAudioMessage: function ( message ) {//收到音频消息的回调方法
                 handleAudioMessage(message);
@@ -790,48 +1010,210 @@
             if ( typeof Message[type] === 'function' ) {
                 this._msg = new Message[type](id);
             }
-            this._msg.handleGroup = this.handleGroup;
+            this._msg.setGroup = this.setGroup;
 
             return this._msg;
         }
         
-        Message.prototype.handleGroup = function ( flag ) {
-            // 群组消息和个人消息的判断分支
-            flag && (this.type = 'groupchat');
+        Message.prototype.setGroup = function ( groupFlag ) {
+            this.type = groupFlag;
         }
 
-        //
+        //文本消息
         Message.txt = function ( id ) {
             this.id = id;
             this.type = 'txt';
+            this.brief = '';
             this.body = {};
-        }
+        };
         Message.txt.prototype.get = function ( isReceive ) {
+            if ( !this.value ) {
+                return '';
+            }
             return [
                 !isReceive ? "<div id='" + this.id + "' class='emim-me'>" : "<div class='emim-notme'>",
                     "<img class='emim-avatar emim-msg-avatar' src='" + (!isReceive ? targetContact.avatar : profileInfo.avatar) + "'/>",
                     "<div class='emim-msg-container'>",
-                        "<p>" + Easemob.im.Utils.parseLink(Easemob.im.Utils.parseEmotions(Easemob.im.utils.encode(this.value))) + "</p>",
+                        "<p>" + Easemob.im.Utils.parseLink(Easemob.im.Utils.parseEmotions(utils.encode(this.value))) + "</p>",
                     "</div>",
                     !isReceive ? "<div id='" + this.id + "_failed' class='emim-msg-status emim-hide'>6</div>" : "",
-                    !isReceive ? "<div id='" + this.id + "_loading' class='emim-msg-loading'>" + Easemob.im.utils.$('emimLoading').innerHTML + "</div>" : "",
+                    !isReceive ? "<div id='" + this.id + "_loading' class='emim-msg-loading'>" + utils.$('emimLoading').innerHTML + "</div>" : "",
+                "</div>"
+            ].join('');
+        };
+        Message.txt.prototype.set = function ( opt ) {
+            this.value = opt.value;
+            if ( this.value ) {
+                this.brief = this.value.replace(/\n/mg, '');
+                this.brief = (this.brief.length > 15 ? this.brief.slice(0, 15) + '...' : this.brief);
+            }
+            this.body = {
+                id: this.id
+                , to: opt.to
+                , msg: this.value 
+                , type : 'chat'
+                , success: opt.success
+                , fail: opt.fail
+            };
+        };
+
+        //图片消息
+        Message.img = function ( id ) {
+            this.id = id;
+            this.type = 'img';
+            this.brief = '[图片]';
+            this.body = {};
+        }
+        Message.img.prototype.get = function ( isReceive ) {
+            return [
+                !isReceive ? "<div id='" + this.id + "' class='emim-me'>" : "<div class='emim-notme'>",
+                    "<img class='emim-avatar emim-msg-avatar' src='" + (!isReceive ? targetContact.avatar : profileInfo.avatar) + "'/>",
+                    "<div class='emim-msg-container'>",
+                        "<p>" + Easemob.im.Utils.parseLink(Easemob.im.Utils.parseEmotions(utils.encode(this.value))) + "</p>",
+                        this.value === null ? "<a class='easemobWidget-noline' href='javascript:;'><i class='easemobWidget-unimage'>I</i></a>" : "<a class='easemobWidget-noline' href='" + this.value.url + "' target='_blank'><img src='" + this.value.url + "'/></a>",
+                    "</div>",
+                    !isReceive ? "<div id='" + this.id + "_failed' class='emim-msg-status emim-hide'>6</div>" : "",
+                    !isReceive ? "<div id='" + this.id + "_loading' class='emim-msg-loading'>" + utils.$('emimLoading').innerHTML + "</div>" : "",
                 "</div>"
             ].join('');
         }
-        Message.txt.prototype.set = function ( value, to, success, fail ) {
-
-            this.value = value;
-
+        Message.img.prototype.set = function ( opt ) {
+            this.value = opt.file;
+                        
             this.body = {
-                id: this.id
-                , to: to
-                , msg: value 
+                id: this.id 
+                , file: this.value 
+                , apiUrl: (https ? 'https:' : 'http:') + '//a1.easemob.com'
+                , to: opt.to
                 , type : 'chat'
-                , success: success
-                , fail: fail
+                , ext: {
+                    messageType: 'img'
+                }
+                , onFileUploadError : opt.uploadError
+                , onFileUploadComplete: opt.uploadComplete
+                , success: opt.success
+                , fail: opt.fail
+                , flashUpload: opt.flashUpload
+            };
+        };
+
+        //文件消息
+        Message.file = function ( id ) {
+            this.id = id;
+            this.type = 'img';
+            this.brief = '文件';
+            this.body = {};
+        }
+        Message.file.prototype.get = function ( isReceive ) {
+            return [
+                !isReceive ? "<div id='" + this.id + "' class='emim-me'>" : "<div class='emim-notme'>",
+                    "<img class='emim-avatar emim-msg-avatar' src='" + (!isReceive ? targetContact.avatar : profileInfo.avatar) + "'/>",
+                    "<div class='emim-msg-container'>",
+                        "<p>" + Easemob.im.Utils.parseLink(Easemob.im.Utils.parseEmotions(utils.encode(this.value))) + "</p>",
+                        this.value === null ? "<a class='easemobWidget-noline' href='javascript:;'><i class='easemobWidget-unimage'>I</i></a>" : "<a class='easemobWidget-noline' href='" + this.value.url + "' target='_blank'><img src='" + this.value.url + "'/></a>",
+                    "</div>",
+                    !isReceive ? "<div id='" + this.id + "_failed' class='emim-msg-status emim-hide'>6</div>" : "",
+                    !isReceive ? "<div id='" + this.id + "_loading' class='emim-msg-loading'>" + utils.$('emimLoading').innerHTML + "</div>" : "",
+                "</div>"
+            ].join('');
+        }
+        Message.file.prototype.set = function ( opt ) {
+            this.value = opt.file;
+                        
+            this.body = {
+                id: this.id 
+                , file: this.value 
+                , apiUrl: (https ? 'https:' : 'http:') + '//a1.easemob.com'
+                , to: opt.to
+                , type : 'chat'
+                , ext: {
+                    messageType: 'file'
+                }
+                , onFileUploadError : opt.uploadError
+                , onFileUploadComplete: opt.uploadComplete
+                , success: opt.success
+                , fail: opt.fail
+                , flashUpload: opt.flashUpload
+            };
+        };
+
+        //位置消息
+        Message.location = function ( id ) {
+            this.id = id;
+            this.type = 'location';
+            this.brief = '位置';
+            this.body = {};
+        }
+        Message.location.prototype.get = function ( isReceive ) {
+            return [
+                !isReceive ? "<div id='" + this.id + "' class='easemobWidget-right'>" : "<div class='easemobWidget-left'>",
+                    "<div class='easemobWidget-msg-wrapper'>",
+                        "<i class='easemobWidget-corner'></i>",
+                        this.id ? "<div id='" + this.id + "_failed' class='easemobWidget-msg-status em-hide'><span>发送失败</span><i></i></div>" : "",
+                        this.id ? "<div id='" + this.id + "_loading' class='easemobWidget-msg-loading'>" + config.LOADING + "</div>" : "",
+                        "<div class='easemobWidget-msg-container'>",
+                            this.value === null ? "<a class='easemobWidget-noline' href='javascript:;'><i class='easemobWidget-unimage'>I</i></a>" : "<a class='easemobWidget-noline' href='" + this.value.url + "' target='_blank'><img src='" + this.value.url + "'/></a>",
+                        "</div>",
+                    "</div>",
+                "</div>"
+            ].join('');
+        }
+        Message.location.prototype.set = function ( opt ) {
+            this.value = opt.file;
+                        
+            this.body = {
+                id: this.id 
+                , file: this.value 
+                , to: opt.to
+                , type : 'chat'
+                , ext: {
+                    messageType: 'location'
+                }
+                , success: opt.success
+                , fail: opt.fail
             };
         }
 
+        //语音消息
+        Message.audio = function ( id ) {
+            this.id = id;
+            this.type = 'audio';
+            this.brief = '语音';
+            this.body = {};
+        }
+        Message.audio.prototype.get = function ( isReceive ) {
+            return [
+                !isReceive ? "<div id='" + this.id + "' class='easemobWidget-right'>" : "<div class='easemobWidget-left'>",
+                    "<div class='easemobWidget-msg-wrapper'>",
+                        "<i class='easemobWidget-corner'></i>",
+                        this.id ? "<div id='" + this.id + "_failed' class='easemobWidget-msg-status em-hide'><span>发送失败</span><i></i></div>" : "",
+                        this.id ? "<div id='" + this.id + "_loading' class='easemobWidget-msg-loading'>" + config.LOADING + "</div>" : "",
+                        "<div class='easemobWidget-msg-container'>",
+                            this.value === null ? "<a class='easemobWidget-noline' href='javascript:;'><i class='easemobWidget-unimage'>I</i></a>" : "<a class='easemobWidget-noline' href='" + this.value.url + "' target='_blank'><img src='" + this.value.url + "'/></a>",
+                        "</div>",
+                    "</div>",
+                "</div>"
+            ].join('');
+        }
+        Message.audio.prototype.set = function ( opt ) {
+            this.value = opt.file;
+                        
+            this.body = {
+                id: this.id 
+                , file: this.value 
+                , apiUrl: (https ? 'https:' : 'http:') + '//a1.easemob.com'
+                , to: opt.to
+                , type : 'chat'
+                , ext: {
+                    messageType: 'audio'
+                }
+                , onFileUploadError : opt.uploadError
+                , onFileUploadComplete: opt.uploadComplete
+                , success: opt.success
+                , fail: opt.fail
+                , flashUpload: opt.flashUpload
+            };
+        }
     });
 
 
