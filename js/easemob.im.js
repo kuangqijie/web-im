@@ -535,7 +535,7 @@
             }
             , signin: function (e) {
                 var evt = e || window.event;
-                if ( evt.keyCode != 0 && evt.keyCode != 13 ) {
+                if ( evt.keyCode && evt.keyCode != 0 && evt.keyCode != 13 ) {
                     return false;
                 }
                 if ( !signin.username ) {

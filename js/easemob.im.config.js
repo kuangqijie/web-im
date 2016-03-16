@@ -17,9 +17,6 @@ Easemob.im.config = {
         https://a1.easemob.com
     */
     apiURL: 'http://a1.easemob.com',
-
     //appkey
     appkey: "easemob-demo#chatdemoui",
-
-    https : false
 }
