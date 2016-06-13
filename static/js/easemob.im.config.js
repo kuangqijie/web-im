@@ -11,7 +11,7 @@ Easemob.im.config = {
     /*
         连接时提供appkey
     */
-    appkey: "easemob-demo#chatdemoui",
+    appkey: "cherrysmart#cherrysmart",
     /*
      * 是否使用https 
      */
